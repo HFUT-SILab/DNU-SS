@@ -1,0 +1,130 @@
+"""Learnable Gabor filtering, ECA, and ArcFace; original arithmetic preserved."""
+
+import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.nn import Parameter
+
+
+class LearnableGaborConv2d(nn.Module):
+    def __init__(
+        self, channel_in, channel_out, kernel_size, stride=1, padding=0, init_ratio=1
+    ):
+        super(LearnableGaborConv2d, self).__init__()
+        self.channel_in = channel_in
+        self.channel_out = channel_out
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+        self.init_ratio = init_ratio if init_ratio > 0 else 1.0
+        self.kernel = 0
+        self._SIGMA = 9.2 * self.init_ratio
+        self._FREQ = 0.057 / self.init_ratio
+        self._GAMMA = 2.0
+        self.gamma = nn.Parameter(torch.FloatTensor([self._GAMMA]), requires_grad=True)
+        self.sigma = nn.Parameter(torch.FloatTensor([self._SIGMA]), requires_grad=True)
+        self.theta = nn.Parameter(
+            torch.FloatTensor(torch.arange(0, channel_out).float())
+            * math.pi
+            / channel_out,
+            requires_grad=False,
+        )
+        self.f = nn.Parameter(torch.FloatTensor([self._FREQ]), requires_grad=True)
+        self.psi = nn.Parameter(torch.FloatTensor([0]), requires_grad=False)
+
+    def build_filter_bank(
+        self, kernel_size, channel_in, channel_out, sigma, gamma, theta, f, psi
+    ):
+        xmax = kernel_size // 2
+        ymax = kernel_size // 2
+        xmin, ymin = (-xmax, -ymax)
+        ksize = xmax - xmin + 1
+        y_0 = torch.arange(ymin, ymax + 1).float()
+        x_0 = torch.arange(xmin, xmax + 1).float()
+        y = y_0.view(1, -1).repeat(channel_out, channel_in, ksize, 1)
+        x = x_0.view(-1, 1).repeat(channel_out, channel_in, 1, ksize)
+        x = x.float().to(sigma.device)
+        y = y.float().to(sigma.device)
+        x_theta = x * torch.cos(theta.view(-1, 1, 1, 1)) + y * torch.sin(
+            theta.view(-1, 1, 1, 1)
+        )
+        y_theta = -x * torch.sin(theta.view(-1, 1, 1, 1)) + y * torch.cos(
+            theta.view(-1, 1, 1, 1)
+        )
+        gb = -torch.exp(
+            -0.5
+            * ((gamma * x_theta) ** 2 + y_theta**2)
+            / (8 * sigma.view(-1, 1, 1, 1) ** 2)
+        ) * torch.cos(
+            2 * math.pi * f.view(-1, 1, 1, 1) * x_theta + psi.view(-1, 1, 1, 1)
+        )
+        gb = gb - gb.mean(dim=[2, 3], keepdim=True)
+        return gb
+
+    def forward(self, x):
+        kernel = self.build_filter_bank(
+            self.kernel_size,
+            self.channel_in,
+            self.channel_out,
+            self.sigma,
+            self.gamma,
+            self.theta,
+            self.f,
+            self.psi,
+        )
+        self.kernel = kernel
+        return F.conv2d(x, kernel, stride=self.stride, padding=self.padding)
+
+
+class ArcFaceClassifier(nn.Module):
+    def __init__(self, in_features, out_features, s=30.0, m=0.5, easy_margin=False):
+        super(ArcFaceClassifier, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.s = s
+        self.m = m
+        self.weight = Parameter(torch.FloatTensor(out_features, in_features))
+        nn.init.xavier_uniform_(self.weight)
+        self.easy_margin = easy_margin
+        self.cos_m = math.cos(m)
+        self.sin_m = math.sin(m)
+        self.th = math.cos(math.pi - m)
+        self.mm = math.sin(math.pi - m) * m
+
+    def forward(self, input, label=None):
+        if self.training:
+            assert label is not None
+            cosine = F.linear(F.normalize(input), F.normalize(self.weight))
+            sine = torch.sqrt((1.0 - torch.pow(cosine, 2)).clamp(0, 1))
+            phi = cosine * self.cos_m - sine * self.sin_m
+            if self.easy_margin:
+                phi = torch.where(cosine > 0, phi, cosine)
+            else:
+                phi = torch.where(cosine > self.th, phi, cosine - self.mm)
+            one_hot = torch.zeros(cosine.size(), device=cosine.device)
+            one_hot.scatter_(1, label.view(-1, 1).long(), 1)
+            output = one_hot * phi + (1.0 - one_hot) * cosine
+            output *= self.s
+        else:
+            cosine = F.linear(F.normalize(input), F.normalize(self.weight))
+            output = self.s * cosine
+        return output
+
+
+class EfficientChannelAttention(nn.Module):
+    def __init__(self, channels, gamma=2, b=1):
+        super(EfficientChannelAttention, self).__init__()
+        t = int(abs((math.log(channels, 2) + b) / gamma))
+        k_size = t if t % 2 else t + 1
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.conv = nn.Conv1d(
+            1, 1, kernel_size=k_size, padding=(k_size - 1) // 2, bias=False
+        )
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        y = self.avg_pool(x)
+        y = self.conv(y.squeeze(-1).transpose(-1, -2)).transpose(-1, -2).unsqueeze(-1)
+        y = self.sigmoid(y)
+        return x * y.expand_as(x)

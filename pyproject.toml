@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dnu-ss"
+version = "0.1.1"
+description = "Dual Non-Uniformity-Aware Selective Spiking for Palmprint Verification"
+readme = "README.md"
+requires-python = ">=3.10"
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.packages.find]
+include = ["dnu_ss*"]
+
+[tool.setuptools.package-data]
+dnu_ss = ["splits/manifest.json", "splits/open/*.txt", "splits/closed/*.txt"]

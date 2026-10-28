@@ -1,0 +1,6 @@
+include README.md NOTICE.md
+include .gitignore .gitattributes requirements.txt
+recursive-include scripts *.sh
+global-exclude *.py[cod]
+prune build
+prune dist

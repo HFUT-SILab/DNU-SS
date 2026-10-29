@@ -98,7 +98,7 @@ def main():
         ablation=model.config.ablation,
         model_config=model.config.to_dict(),
         strict_load=True,
-        precision="FP32; backend defaults retained, matching the reference entry point",
+        precision="FP32; backend defaults retained",
         numerical_settings=dict(
             cuda_matmul_allow_tf32=torch.backends.cuda.matmul.allow_tf32,
             cudnn_allow_tf32=torch.backends.cudnn.allow_tf32,
@@ -142,3 +142,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

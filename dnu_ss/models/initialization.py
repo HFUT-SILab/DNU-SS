@@ -1,4 +1,4 @@
-"""Preserve reference initialization without retaining inactive network modules."""
+"""Initialization random-number consumption and optimizer parameter ordering."""
 
 import math
 import torch
@@ -6,11 +6,11 @@ from torch import nn
 
 
 def consume_sgsb_initialization(config):
-    """Advance the CPU initializer stream used by the reference TEB-only run.
+    """Consume SGSB weight-initialization draws for the TEB-only configuration.
 
-    The reference constructed, froze and bypassed SGSB. Consume its weight
-    draws without constructing or retaining a second branch. Normalization,
-    neurons and fixed scoring buffers do not draw random numbers.
+    This keeps the subsequent CPU random-number stream consistent without
+    constructing an inactive branch. Normalization, neurons and fixed scoring
+    buffers do not draw random numbers.
     """
     dim = config.embedding_dim
 
@@ -34,7 +34,7 @@ def consume_sgsb_initialization(config):
 
 
 def training_parameters(model):
-    """Reference traversal order, expressed using the paper's native modules."""
+    """Yield model parameters in optimizer initialization order."""
     yield from model.dgt_stem.parameters()
     yield from model.teb.refine_large.parameters()
     yield from model.teb.refine_small.parameters()

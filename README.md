@@ -19,8 +19,7 @@ DNU-SS combines local texture representation and selective spiking interaction:
   descriptors without the classification head.
 
 The complete model uses four computational steps and update counts
-225/191/157/123. All model components are defined directly in this package;
-the code does not import or wrap an older model implementation.
+225/191/157/123.
 
 ## Repository Structure
 

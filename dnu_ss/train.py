@@ -28,7 +28,7 @@ def learning_rate_multiplier(epoch, warmup, epochs, minimum, base):
 
 
 def train_epoch(model, loader, optimizer, criterion, scaler, device):
-    """Reference forward/count/zero-grad/backward/update ordering."""
+    """Train for one epoch and return loss and classification accuracy."""
     model.train()
     total_loss, correct, count = 0.0, 0, 0
     for images, labels in loader:
@@ -156,8 +156,6 @@ def main():
         model_config=config.to_dict(),
         split_report=protocol,
         checkpoint_selection="highest training classification accuracy; latest epoch wins ties",
-        workflow="legacy-aligned",
-        initialization="reference tensor values and post-construction RNG stream",
         numerical_settings=dict(
             cuda_matmul_allow_tf32=torch.backends.cuda.matmul.allow_tf32,
             cudnn_allow_tf32=torch.backends.cudnn.allow_tf32,
@@ -256,7 +254,7 @@ def main():
             )
             if optimizer_updates == 0:
                 print(
-                    "AMP overflow skipped all updates this epoch; reference LR schedule advanced.",
+                    "AMP overflow skipped all updates this epoch; LR schedule advanced.",
                     flush=True,
                 )
     update_hook.remove()

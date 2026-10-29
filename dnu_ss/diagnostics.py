@@ -1,4 +1,4 @@
-"""Reference prior visualization, including its evaluation forward pass."""
+"""Palmprint prior visualization in evaluation mode."""
 
 from pathlib import Path
 import torch
